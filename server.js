@@ -3,7 +3,7 @@
 // ========================================================
 
 const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth'); 
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');  
 puppeteer.use(StealthPlugin());
 
 const express = require('express');
@@ -183,5 +183,6 @@ process.on('SIGTERM', async () => {
   if (browser) await browser.close();
   process.exit(0);
 });
+
 
 
