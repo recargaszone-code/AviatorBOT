@@ -1,6 +1,6 @@
 // ========================================================
-// Aviator Monitor Bot - VERSÃO RAILWAY 24/7 (Hobby Plan)
-// Otimizado: delay startup + health check + baixa RAM
+// Aviator Monitor Bot - VERSÃO RAILWAY 24/7 (FINAL)
+// Screenshot de debug + retry login + timeouts altos
 // ========================================================
 
 const puppeteer = require('puppeteer-extra');
@@ -14,7 +14,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const app = express();
 const port = process.env.PORT || 8080;
 
-// CONFIGURAÇÕES - USE VARIÁVEIS DE AMBIENTE NO RAILWAY (NUNCA HARDCODE)
+// CONFIGURAÇÕES (USE VARIÁVEIS DE AMBIENTE NO RAILWAY)
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 const TELEFONE = process.env.TELEFONE;
@@ -38,11 +38,20 @@ async function enviarTelegram(mensagem) {
   }
 }
 
+async function enviarScreenshot(caption = '📸 Screenshot') {
+  try {
+    const screenshot = await page.screenshot({ encoding: 'base64' });
+    await bot.sendPhoto(CHAT_ID, Buffer.from(screenshot, 'base64'), { caption });
+    console.log('[DEBUG] Screenshot enviado no Telegram');
+  } catch (e) {
+    console.error('[SCREENSHOT ERRO]', e.message);
+  }
+}
+
 async function getIframeFrame() {
   try {
-    const iframeElement = await page.waitForSelector('iframe', { timeout: 15000 });
+    const iframeElement = await page.waitForSelector('iframe', { timeout: 30000 });
     const frame = await iframeElement.contentFrame();
-    if (!frame) throw new Error('ContentFrame não acessível');
     console.log('[IFRAME] Re-pego com sucesso!');
     return frame;
   } catch (err) {
@@ -68,42 +77,63 @@ async function iniciarBot() {
         '--disable-accelerated-2d-canvas',
         '--memory-pressure-off',
         '--window-size=1024,768',
-        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+        '--user-agent=Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36'
       ],
     });
 
     page = await browser.newPage();
+    await page.setViewport({ width: 1024, height: 768 });
+
     console.log(`[BOT] Abrindo: ${URL_AVIATOR}`);
-    await page.goto(URL_AVIATOR, { waitUntil: 'networkidle2', timeout: 120000 });
+    await page.goto(URL_AVIATOR, { waitUntil: 'networkidle0', timeout: 180000 });
 
-    // LOGIN AUTOMÁTICO
+    // DEBUG: screenshot inicial
+    await enviarScreenshot('📸 Página inicial carregada');
+
+    // LOGIN AUTOMÁTICO COM RETRY
     console.log('[LOGIN] Iniciando login automático...');
-    await page.waitForSelector('input#phone', { timeout: 90000, visible: true });
-    await page.type('input#phone', TELEFONE);
-    console.log('[LOGIN] Telefone digitado');
+    let loginTentativas = 0;
+    const maxTentativas = 2;
 
-    await page.waitForSelector('input#password', { timeout: 60000, visible: true });
-    await page.type('input#password', SENHA);
-    console.log('[LOGIN] Senha digitada');
+    while (loginTentativas < maxTentativas) {
+      try {
+        await page.waitForSelector('input#phone', { timeout: 180000, visible: true });
+        await page.type('input#phone', TELEFONE);
+        console.log('[LOGIN] Telefone digitado');
 
-    await page.waitForSelector('button.login-btn', { timeout: 60000, visible: true });
-    await page.click('button.login-btn');
-    console.log('[LOGIN] Botão de login clicado');
+        await page.waitForSelector('input#password', { timeout: 120000, visible: true });
+        await page.type('input#password', SENHA);
+        console.log('[LOGIN] Senha digitada');
 
-    await page.waitForSelector('iframe', { timeout: 120000 });
-    console.log('[LOGIN] Jogo carregando...');
+        await page.waitForSelector('button.login-btn', { timeout: 120000, visible: true });
+        await page.click('button.login-btn');
+        console.log('[LOGIN] Botão clicado');
 
-    await new Promise(resolve => setTimeout(resolve, 12000));
+        await page.waitForSelector('iframe', { timeout: 180000 });
+        console.log('[LOGIN] Jogo carregando...');
 
-    let frame = await getIframeFrame();
-    if (!frame) throw new Error('Não conseguiu pegar iframe após login');
+        await new Promise(r => setTimeout(r, 15000));
 
-    enviarTelegram('🤖 Bot logado na 888bets e monitorando histórico REAL do Aviator! 🔥');
+        const frame = await getIframeFrame();
+        if (!frame) throw new Error('Iframe não encontrado');
+
+        enviarTelegram('🤖 Bot logado na 888bets e monitorando histórico REAL do Aviator! 🔥');
+        break; // sucesso
+
+      } catch (loginErr) {
+        loginTentativas++;
+        console.error(`[LOGIN] Tentativa ${loginTentativas} falhou:`, loginErr.message);
+        await enviarScreenshot(`❌ DEBUG - Falha no login (tentativa ${loginTentativas})`);
+
+        if (loginTentativas >= maxTentativas) throw loginErr;
+        await new Promise(r => setTimeout(r, 10000)); // espera e tenta de novo
+      }
+    }
 
     // LOOP PRINCIPAL
     setInterval(async () => {
       try {
-        frame = await getIframeFrame();
+        const frame = await getIframeFrame();
         if (!frame) return;
 
         const payouts = await frame.$$eval(
@@ -124,18 +154,15 @@ async function iniciarBot() {
               novos.push(valor);
 
               let msg = `🕒 ${timestamp} | <b>${valor.toFixed(2)}x</b>`;
-              if (valor >= 50) {
-                msg = `🚀 FOGUETÃO INSANO! ${valor.toFixed(2)}x 🚀\n${msg}`;
-              } else if (valor >= 10) {
-                msg = `🔥 BOA! ${valor.toFixed(2)}x 🔥\n${msg}`;
-              }
+              if (valor >= 50) msg = `🚀 FOGUETÃO INSANO! ${valor.toFixed(2)}x 🚀\n${msg}`;
+              else if (valor >= 10) msg = `🔥 BOA! ${valor.toFixed(2)}x 🔥\n${msg}`;
+
               enviarTelegram(msg);
             }
           }
         });
 
         if (novos.length > 0) {
-          console.log(`Novos do histórico: ${novos.map(v => v.toFixed(2)).join(', ')}`);
           fs.writeFileSync('historico.json', JSON.stringify(multiplicadores, null, 2));
         }
 
@@ -146,37 +173,26 @@ async function iniciarBot() {
 
   } catch (err) {
     console.error('[ERRO FATAL]', err.message);
+    await enviarScreenshot('💥 ERRO FATAL - Screenshot final');
     if (browser) await browser.close();
-    process.exit(1); // força restart do Railway
+    process.exit(1);
   }
 }
 
-// ====================== RAILWAY HEALTH CHECK ======================
-app.get('/health', (req, res) => {
-  res.status(200).send('✅ Aviator Bot ONLINE - Railway Health Check');
-});
-
+// ====================== HEALTH CHECK ======================
+app.get('/health', (req, res) => res.status(200).send('✅ ONLINE'));
 app.get('/', (req, res) => {
-  res.send(`
-    <h1>Aviator Monitor Bot (Railway 24/7)</h1>
-    <p>Status: <b>RODANDO</b></p>
-    <p>Capturados: ${multiplicadores.length}</p>
-    <p>Últimos 5: ${multiplicadores.slice(-5).map(m => m.valor.toFixed(2) + 'x').join(', ')}</p>
-  `);
+  res.send(`<h1>Aviator Bot Railway</h1><p>Capturados: ${multiplicadores.length}</p>`);
 });
 
 app.listen(port, () => {
-  console.log(`🚀 Servidor rodando na porta ${port} (Railway detectado)`);
-  console.log('[RAILWAY] Aguardando 8 segundos para iniciar o bot pesado...');
-  
-  // DELAY OBRIGATÓRIO pra não dar SIGTERM de RAM
-  setTimeout(() => {
-    iniciarBot().catch(err => console.error(err));
-  }, 8000);
+  console.log(`🚀 Servidor rodando na porta ${port}`);
+  console.log('[RAILWAY] Aguardando 10 segundos para iniciar o bot...');
+  setTimeout(() => iniciarBot().catch(console.error), 10000);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('🛑 Recebido SIGTERM - Fechando browser...');
+  console.log('🛑 SIGTERM - Fechando...');
   if (browser) await browser.close();
   process.exit(0);
 });
