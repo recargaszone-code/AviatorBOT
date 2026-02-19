@@ -61,24 +61,14 @@ async function iniciarBot() {
 
 browser = await puppeteer.launch({
   headless: 'new',
-  executablePath: '/usr/bin/google-chrome-stable',
-  ignoreHTTPSErrors: true,
   args: [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
     '--disable-gpu',
-    '--disable-software-rasterizer',
-    '--disable-webgl',
-    '--disable-accelerated-2d-canvas',
-    '--no-first-run',
     '--no-zygote',
-    '--single-process',           // importante em containers com pouca RAM
-    '--disable-background-timer-throttling',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--window-size=1280,800',
-    '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+    '--single-process',
+    '--window-size=1280,800'
   ],
 });
 
@@ -189,3 +179,4 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 
 });
+
