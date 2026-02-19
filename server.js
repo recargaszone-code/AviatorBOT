@@ -1,5 +1,6 @@
 // ========================================================
 // Aviator Multi-Site Monitor - 888bet + PremierBet + Betway (Railway 24/7)
+// Versão LIMPA - Sem duplicata de 'app'
 // ========================================================
 
 const puppeteer = require('puppeteer-extra');
@@ -10,10 +11,10 @@ const express = require('express');
 const fs = require('fs');
 const TelegramBot = require('node-telegram-bot-api');
 
-const app = express();
+const app = express();  // ← SÓ UMA VEZ AQUI
 const port = process.env.PORT || 8080;
 
-// ====================== CONFIGURAÇÕES DOS SITES ======================
+// ====================== CONFIGURAÇÕES DOS 3 SITES ======================
 const SITES = [
   {
     nome: "888bet",
@@ -30,29 +31,30 @@ const SITES = [
     url: "https://www.premierbet.co.mz/virtuals/game/aviator-291195",
     telefone: process.env.TELEFONE || "857789345",
     senha: process.env.SENHA || "max123ZICO",
-    phoneSelector: 'input[type="tel"], input[placeholder*="digite"], input[name*="phone"]',
+    phoneSelector: 'input[type="tel"], input[placeholder*="digite"], input[name*="phone"], input#phone',
     passSelector: 'input[type="password"]',
     buttonSelector: '//button[contains(text(), "Iniciar Sessão")]',
-    payoutSelector: '.payouts-block .payout.ng-star-inserted'  // ajuste se precisar
+    payoutSelector: '.payout, [class*="payout"], [class*="multiplier"], .history-item, .bet-history-item'
   },
   {
     nome: "Betway",
     url: "https://www.betway.co.mz/lobby/instant%20games/game/aviator?vertical=instantgames",
     telefone: process.env.TELEFONE || "857789345",
     senha: process.env.SENHA || "max123ZICO",
-    phoneSelector: 'input[type="tel"], input[placeholder*="digite"], input[name*="phone"]',
+    phoneSelector: 'input[type="tel"], input[placeholder*="digite"], input[name*="phone"], input#phone',
     passSelector: 'input[type="password"]',
     buttonSelector: '//button[contains(text(), "Entrar")]',
-    payoutSelector: '.payouts-block .payout.ng-star-inserted'  // ajuste se precisar
+    payoutSelector: '.payout, [class*="payout"], [class*="multiplier"], .history-item, .bet-history-item'
   }
 ];
 
-const TELEGRAM_TOKEN = "8583470384:AAF0poQRbfGkmGy7cA604C4b_-MhYj-V7XM";
-const CHAT_ID = "7427648935";
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const CHAT_ID = process.env.CHAT_ID;
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 let browsers = [];
+global.historicoAntigo = new Set();
 
 // ====================== FUNÇÕES ======================
 async function enviarTelegram(msg, site) {
@@ -65,20 +67,16 @@ async function enviarTelegram(msg, site) {
 async function iniciarSite(siteConfig) {
   const { nome, url, telefone, senha, phoneSelector, passSelector, buttonSelector, payoutSelector } = siteConfig;
 
-  console.log(`[${nome}] Iniciando monitor...`);
+  console.log(`[${nome}] 🚀 Iniciando...`);
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: [
-      '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-      '--disable-gpu', '--no-zygote', '--single-process', '--window-size=1024,768'
-    ]
+    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--single-process', '--window-size=1024,768']
   });
 
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: 'networkidle0', timeout: 180000 });
 
-  // LOGIN
   console.log(`[${nome}] Fazendo login...`);
   await page.waitForSelector(phoneSelector, { timeout: 180000 });
   await page.type(phoneSelector, telefone);
@@ -87,9 +85,8 @@ async function iniciarSite(siteConfig) {
   await page.type(passSelector, senha);
 
   if (buttonSelector.startsWith('//')) {
-    // XPath para botões com texto
-    const [button] = await page.$x(buttonSelector);
-    if (button) await button.click();
+    const [btn] = await page.$x(buttonSelector);
+    if (btn) await btn.click();
   } else {
     await page.click(buttonSelector);
   }
@@ -104,18 +101,15 @@ async function iniciarSite(siteConfig) {
       );
 
       payouts.forEach(texto => {
-        const valor = parseFloat(texto.replace('x', '').replace(',', '.'));
+        const valor = parseFloat(texto.replace('x','').replace(',','.'));
         if (!isNaN(valor)) {
           const key = `${nome}-${valor.toFixed(2)}`;
           if (!global.historicoAntigo.has(key)) {
             global.historicoAntigo.add(key);
-
             const timestamp = new Date().toISOString().slice(11,19);
             let msg = `🕒 ${timestamp} | <b>${valor.toFixed(2)}x</b>`;
-
             if (valor >= 50) msg = `🚀 FOGUETÃO INSANO! ${valor.toFixed(2)}x 🚀\n${msg}`;
             else if (valor >= 10) msg = `🔥 BOA! ${valor.toFixed(2)}x 🔥\n${msg}`;
-
             enviarTelegram(msg, nome);
           }
         }
@@ -124,18 +118,17 @@ async function iniciarSite(siteConfig) {
   }, 7000);
 
   browsers.push(browser);
-  enviarTelegram('🤖 Monitor INICIADO com sucesso!', nome);
+  enviarTelegram('🤖 Monitor INICIADO e rodando 24/7!', nome);
 }
 
-// ====================== START ======================
-const app = express();
+// ====================== RAILWAY START ======================
 app.get('/health', (req, res) => res.send('✅ Multi-Aviator ONLINE'));
+app.get('/', (req, res) => res.send('<h1>Aviator Multi-Site Rodando no Railway</h1>'));
+
 app.listen(port, async () => {
   console.log(`🚀 Railway Multi-Site Aviator rodando na porta ${port}`);
-  global.historicoAntigo = new Set();
-
   for (const site of SITES) {
-    iniciarSite(site).catch(err => console.error(`[${site.nome}] ERRO:`, err.message));
+    iniciarSite(site).catch(err => console.error(`[${site.nome}] ERRO FATAL:`, err.message));
   }
 });
 
