@@ -1,6 +1,6 @@
 // ========================================================
-// Aviator Multi-Site Monitor - 888bet + PremierBet + Betway (Railway 24/7)
-// Versão LIMPA - Sem duplicata de 'app'
+// Aviator Monitor Bot - VERSÃO RAILWAY 24/7 (FINAL)
+// Screenshot de debug + retry login + timeouts altos
 // ========================================================
 
 const puppeteer = require('puppeteer-extra');
@@ -11,128 +11,188 @@ const express = require('express');
 const fs = require('fs');
 const TelegramBot = require('node-telegram-bot-api');
 
-const app = express();  // ← SÓ UMA VEZ AQUI
+const app = express();
 const port = process.env.PORT || 8080;
 
-// ====================== CONFIGURAÇÕES DOS 3 SITES ======================
-const SITES = [
-  {
-    nome: "888bet",
-    url: "https://m.888bets.co.mz/pt/games/detail/casino/normal/7787",
-    telefone: process.env.TELEFONE_888 || "863584494",
-    senha: process.env.SENHA_888 || "0000000000",
-    phoneSelector: 'input#phone',
-    passSelector: 'input#password',
-    buttonSelector: 'button.login-btn',
-    payoutSelector: '.payouts-block .payout.ng-star-inserted'
-  },
-  {
-    nome: "PremierBet",
-    url: "https://www.premierbet.co.mz/virtuals/game/aviator-291195",
-    telefone: process.env.TELEFONE || "857789345",
-    senha: process.env.SENHA || "max123ZICO",
-    phoneSelector: 'input[type="tel"], input[placeholder*="digite"], input[name*="phone"], input#phone',
-    passSelector: 'input[type="password"]',
-    buttonSelector: '//button[contains(text(), "Iniciar Sessão")]',
-    payoutSelector: '.payout, [class*="payout"], [class*="multiplier"], .history-item, .bet-history-item'
-  },
-  {
-    nome: "Betway",
-    url: "https://www.betway.co.mz/lobby/instant%20games/game/aviator?vertical=instantgames",
-    telefone: process.env.TELEFONE || "857789345",
-    senha: process.env.SENHA || "max123ZICO",
-    phoneSelector: 'input[type="tel"], input[placeholder*="digite"], input[name*="phone"], input#phone',
-    passSelector: 'input[type="password"]',
-    buttonSelector: '//button[contains(text(), "Entrar")]',
-    payoutSelector: '.payout, [class*="payout"], [class*="multiplier"], .history-item, .bet-history-item'
-  }
-];
-
+// CONFIGURAÇÕES (USE VARIÁVEIS DE AMBIENTE NO RAILWAY)
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
+const TELEFONE = process.env.TELEFONE;
+const SENHA = process.env.SENHA;
+const URL_AVIATOR = process.env.URL_AVIATOR || 'https://m.888bets.co.mz/pt/games/detail/casino/normal/7787';
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
-let browsers = [];
-global.historicoAntigo = new Set();
+let browser;
+let page;
+let historicoAntigo = new Set();
+let multiplicadores = [];
 
-// ====================== FUNÇÕES ======================
-async function enviarTelegram(msg, site) {
-  const texto = `🟢 <b>[${site}]</b> ${msg}`;
+// FUNÇÕES AUXILIARES
+async function enviarTelegram(mensagem) {
   try {
-    await bot.sendMessage(CHAT_ID, texto, { parse_mode: 'HTML' });
-  } catch (e) {}
+    await bot.sendMessage(CHAT_ID, mensagem, { parse_mode: 'HTML' });
+    console.log('[TELEGRAM] Enviado:', mensagem);
+  } catch (err) {
+    console.error('[TELEGRAM ERRO]', err.message);
+  }
 }
 
-async function iniciarSite(siteConfig) {
-  const { nome, url, telefone, senha, phoneSelector, passSelector, buttonSelector, payoutSelector } = siteConfig;
-
-  console.log(`[${nome}] 🚀 Iniciando...`);
-
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--single-process', '--window-size=1024,768']
-  });
-
-  const page = await browser.newPage();
-  await page.goto(url, { waitUntil: 'networkidle0', timeout: 180000 });
-
-  console.log(`[${nome}] Fazendo login...`);
-  await page.waitForSelector(phoneSelector, { timeout: 180000 });
-  await page.type(phoneSelector, telefone);
-
-  await page.waitForSelector(passSelector, { timeout: 120000 });
-  await page.type(passSelector, senha);
-
-  if (buttonSelector.startsWith('//')) {
-    const [btn] = await page.$x(buttonSelector);
-    if (btn) await btn.click();
-  } else {
-    await page.click(buttonSelector);
+async function enviarScreenshot(caption = '📸 Screenshot') {
+  try {
+    const screenshot = await page.screenshot({ encoding: 'base64' });
+    await bot.sendPhoto(CHAT_ID, Buffer.from(screenshot, 'base64'), { caption });
+    console.log('[DEBUG] Screenshot enviado no Telegram');
+  } catch (e) {
+    console.error('[SCREENSHOT ERRO]', e.message);
   }
+}
 
-  await new Promise(r => setTimeout(r, 15000));
+async function getIframeFrame() {
+  try {
+    const iframeElement = await page.waitForSelector('iframe', { timeout: 30000 });
+    const frame = await iframeElement.contentFrame();
+    console.log('[IFRAME] Re-pego com sucesso!');
+    return frame;
+  } catch (err) {
+    console.error('[IFRAME ERRO]', err.message);
+    return null;
+  }
+}
 
-  // LOOP DO HISTÓRICO
-  setInterval(async () => {
-    try {
-      const payouts = await page.$$eval(payoutSelector, els => 
-        els.map(el => el.innerText.trim()).filter(t => t && t.endsWith('x'))
-      );
+// INÍCIO DO BOT
+async function iniciarBot() {
+  try {
+    console.log('[BOT] Iniciando Aviator Monitor com Stealth...');
 
-      payouts.forEach(texto => {
-        const valor = parseFloat(texto.replace('x','').replace(',','.'));
-        if (!isNaN(valor)) {
-          const key = `${nome}-${valor.toFixed(2)}`;
-          if (!global.historicoAntigo.has(key)) {
-            global.historicoAntigo.add(key);
-            const timestamp = new Date().toISOString().slice(11,19);
-            let msg = `🕒 ${timestamp} | <b>${valor.toFixed(2)}x</b>`;
-            if (valor >= 50) msg = `🚀 FOGUETÃO INSANO! ${valor.toFixed(2)}x 🚀\n${msg}`;
-            else if (valor >= 10) msg = `🔥 BOA! ${valor.toFixed(2)}x 🔥\n${msg}`;
-            enviarTelegram(msg, nome);
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote',
+        '--single-process',
+        '--disable-accelerated-2d-canvas',
+        '--memory-pressure-off',
+        '--window-size=1024,768',
+        '--user-agent=Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36'
+      ],
+    });
+
+    page = await browser.newPage();
+    await page.setViewport({ width: 1024, height: 768 });
+
+    console.log(`[BOT] Abrindo: ${URL_AVIATOR}`);
+    await page.goto(URL_AVIATOR, { waitUntil: 'networkidle0', timeout: 180000 });
+
+    // DEBUG: screenshot inicial
+    await enviarScreenshot('📸 Página inicial carregada');
+
+    // LOGIN AUTOMÁTICO COM RETRY
+    console.log('[LOGIN] Iniciando login automático...');
+    let loginTentativas = 0;
+    const maxTentativas = 2;
+
+    while (loginTentativas < maxTentativas) {
+      try {
+        await page.waitForSelector('input#phone', { timeout: 180000, visible: true });
+        await page.type('input#phone', TELEFONE);
+        console.log('[LOGIN] Telefone digitado');
+
+        await page.waitForSelector('input#password', { timeout: 120000, visible: true });
+        await page.type('input#password', SENHA);
+        console.log('[LOGIN] Senha digitada');
+
+        await page.waitForSelector('button.login-btn', { timeout: 120000, visible: true });
+        await page.click('button.login-btn');
+        console.log('[LOGIN] Botão clicado');
+
+        await page.waitForSelector('iframe', { timeout: 180000 });
+        console.log('[LOGIN] Jogo carregando...');
+
+        await new Promise(r => setTimeout(r, 15000));
+
+        const frame = await getIframeFrame();
+        if (!frame) throw new Error('Iframe não encontrado');
+
+        enviarTelegram('🤖 Bot logado na 888bets e monitorando histórico REAL do Aviator! 🔥');
+        break; // sucesso
+
+      } catch (loginErr) {
+        loginTentativas++;
+        console.error(`[LOGIN] Tentativa ${loginTentativas} falhou:`, loginErr.message);
+        await enviarScreenshot(`❌ DEBUG - Falha no login (tentativa ${loginTentativas})`);
+
+        if (loginTentativas >= maxTentativas) throw loginErr;
+        await new Promise(r => setTimeout(r, 10000)); // espera e tenta de novo
+      }
+    }
+
+    // LOOP PRINCIPAL
+    setInterval(async () => {
+      try {
+        const frame = await getIframeFrame();
+        if (!frame) return;
+
+        const payouts = await frame.$$eval(
+          '.payouts-block .payout.ng-star-inserted',
+          els => els.map(el => el.innerText.trim()).filter(t => t && t.endsWith('x'))
+        );
+
+        const novos = [];
+        payouts.forEach(texto => {
+          const valorStr = texto.replace('x', '').trim().replace(',', '.');
+          const valor = parseFloat(valorStr);
+          if (!isNaN(valor)) {
+            const key = valor.toFixed(2);
+            if (!historicoAntigo.has(key)) {
+              historicoAntigo.add(key);
+              const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+              multiplicadores.push({ timestamp, valor });
+              novos.push(valor);
+
+              let msg = `🕒 ${timestamp} | <b>${valor.toFixed(2)}x</b>`;
+              if (valor >= 50) msg = `🚀 FOGUETÃO INSANO! ${valor.toFixed(2)}x 🚀\n${msg}`;
+              else if (valor >= 10) msg = `🔥 BOA! ${valor.toFixed(2)}x 🔥\n${msg}`;
+
+              enviarTelegram(msg);
+            }
           }
-        }
-      });
-    } catch (e) {}
-  }, 7000);
+        });
 
-  browsers.push(browser);
-  enviarTelegram('🤖 Monitor INICIADO e rodando 24/7!', nome);
+        if (novos.length > 0) {
+          fs.writeFileSync('historico.json', JSON.stringify(multiplicadores, null, 2));
+        }
+
+      } catch (err) {
+        console.error('[ERRO no loop]', err.message);
+      }
+    }, 8000);
+
+  } catch (err) {
+    console.error('[ERRO FATAL]', err.message);
+    await enviarScreenshot('💥 ERRO FATAL - Screenshot final');
+    if (browser) await browser.close();
+    process.exit(1);
+  }
 }
 
-// ====================== RAILWAY START ======================
-app.get('/health', (req, res) => res.send('✅ Multi-Aviator ONLINE'));
-app.get('/', (req, res) => res.send('<h1>Aviator Multi-Site Rodando no Railway</h1>'));
+// ====================== HEALTH CHECK ======================
+app.get('/health', (req, res) => res.status(200).send('✅ ONLINE'));
+app.get('/', (req, res) => {
+  res.send(`<h1>Aviator Bot Railway</h1><p>Capturados: ${multiplicadores.length}</p>`);
+});
 
-app.listen(port, async () => {
-  console.log(`🚀 Railway Multi-Site Aviator rodando na porta ${port}`);
-  for (const site of SITES) {
-    iniciarSite(site).catch(err => console.error(`[${site.nome}] ERRO FATAL:`, err.message));
-  }
+app.listen(port, () => {
+  console.log(`🚀 Servidor rodando na porta ${port}`);
+  console.log('[RAILWAY] Aguardando 10 segundos para iniciar o bot...');
+  setTimeout(() => iniciarBot().catch(console.error), 10000);
 });
 
 process.on('SIGTERM', async () => {
-  for (const b of browsers) await b.close();
+  console.log('🛑 SIGTERM - Fechando...');
+  if (browser) await browser.close();
   process.exit(0);
 });
