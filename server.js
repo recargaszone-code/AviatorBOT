@@ -26,7 +26,7 @@ let browser;
 let page;
 let historicoAntigo = new Set();
 let historicoAtual = [];        // ← ARRAY QUE VOCÊ PEDIU
-const MAX_HISTORICO = 20;       // últimos 20 multiplicadores (pode mudar)
+const MAX_HISTORICO = 30;       // últimos 20 multiplicadores (pode mudar)
 
 let multiplicadores = [];
 
@@ -183,4 +183,5 @@ process.on('SIGTERM', async () => {
   if (browser) await browser.close();
   process.exit(0);
 });
+
 
