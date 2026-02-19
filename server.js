@@ -1,7 +1,6 @@
 // ========================================================
-// Aviator Monitor Bot - Versão PC Direto (funcionando local)
-// Captura SÓ histórico real da .payouts-block
-// Login automático + Telegram + Logs simples
+// Aviator Monitor Bot - VERSÃO RAILWAY 24/7 (Hobby Plan)
+// Otimizado: delay startup + health check + baixa RAM
 // ========================================================
 
 const puppeteer = require('puppeteer-extra');
@@ -13,16 +12,14 @@ const fs = require('fs');
 const TelegramBot = require('node-telegram-bot-api');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
-// CONFIGURAÇÕES
-const TELEGRAM_TOKEN = '8583470384:AAF0poQRbfGkmGy7cA604C4b_-MhYj-V7XM';
-const CHAT_ID = '7427648935';
-
-const TELEFONE = '863584494';
-const SENHA = '0000000000';
-
-const URL_AVIATOR = 'https://m.888bets.co.mz/pt/games/detail/casino/normal/7787';
+// CONFIGURAÇÕES - USE VARIÁVEIS DE AMBIENTE NO RAILWAY (NUNCA HARDCODE)
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const CHAT_ID = process.env.CHAT_ID;
+const TELEFONE = process.env.TELEFONE;
+const SENHA = process.env.SENHA;
+const URL_AVIATOR = process.env.URL_AVIATOR || 'https://m.888bets.co.mz/pt/games/detail/casino/normal/7787';
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
@@ -59,43 +56,44 @@ async function iniciarBot() {
   try {
     console.log('[BOT] Iniciando Aviator Monitor com Stealth...');
 
-browser = await puppeteer.launch({
-  headless: 'new',
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--no-zygote',
-    '--single-process',
-    '--window-size=1280,800'
-  ],
-});
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote',
+        '--single-process',
+        '--disable-accelerated-2d-canvas',
+        '--memory-pressure-off',
+        '--window-size=1024,768',
+        '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36'
+      ],
+    });
 
     page = await browser.newPage();
-
     console.log(`[BOT] Abrindo: ${URL_AVIATOR}`);
-    await page.goto(URL_AVIATOR, { waitUntil: 'networkidle2', timeout: 90000 });
+    await page.goto(URL_AVIATOR, { waitUntil: 'networkidle2', timeout: 120000 });
 
     // LOGIN AUTOMÁTICO
     console.log('[LOGIN] Iniciando login automático...');
-
-    await page.waitForSelector('input#phone', { timeout: 60000, visible: true });
+    await page.waitForSelector('input#phone', { timeout: 90000, visible: true });
     await page.type('input#phone', TELEFONE);
     console.log('[LOGIN] Telefone digitado');
 
-    await page.waitForSelector('input#password', { timeout: 30000, visible: true });
+    await page.waitForSelector('input#password', { timeout: 60000, visible: true });
     await page.type('input#password', SENHA);
     console.log('[LOGIN] Senha digitada');
 
-    await page.waitForSelector('button.login-btn', { timeout: 30000, visible: true });
+    await page.waitForSelector('button.login-btn', { timeout: 60000, visible: true });
     await page.click('button.login-btn');
     console.log('[LOGIN] Botão de login clicado');
 
-    await page.waitForSelector('iframe', { timeout: 90000 });
+    await page.waitForSelector('iframe', { timeout: 120000 });
     console.log('[LOGIN] Jogo carregando...');
 
-    await new Promise(resolve => setTimeout(resolve, 10000)); // Espera estabilizar
+    await new Promise(resolve => setTimeout(resolve, 12000));
 
     let frame = await getIframeFrame();
     if (!frame) throw new Error('Não conseguiu pegar iframe após login');
@@ -128,14 +126,9 @@ browser = await puppeteer.launch({
               let msg = `🕒 ${timestamp} | <b>${valor.toFixed(2)}x</b>`;
               if (valor >= 50) {
                 msg = `🚀 FOGUETÃO INSANO! ${valor.toFixed(2)}x 🚀\n${msg}`;
-                console.log(`[${timestamp}] FOGUETÃO: ${valor.toFixed(2)}x`);
               } else if (valor >= 10) {
                 msg = `🔥 BOA! ${valor.toFixed(2)}x 🔥\n${msg}`;
-                console.log(`[${timestamp}] BOA: ${valor.toFixed(2)}x`);
-              } else {
-                console.log(`[${timestamp}] Novo histórico: ${valor.toFixed(2)}x`);
               }
-
               enviarTelegram(msg);
             }
           }
@@ -144,7 +137,6 @@ browser = await puppeteer.launch({
         if (novos.length > 0) {
           console.log(`Novos do histórico: ${novos.map(v => v.toFixed(2)).join(', ')}`);
           fs.writeFileSync('historico.json', JSON.stringify(multiplicadores, null, 2));
-          console.log('historico.json atualizado');
         }
 
       } catch (err) {
@@ -155,28 +147,36 @@ browser = await puppeteer.launch({
   } catch (err) {
     console.error('[ERRO FATAL]', err.message);
     if (browser) await browser.close();
+    process.exit(1); // força restart do Railway
   }
 }
 
-// SERVER PRA TESTE LOCAL (opcional, pode rodar sem isso)
+// ====================== RAILWAY HEALTH CHECK ======================
+app.get('/health', (req, res) => {
+  res.status(200).send('✅ Aviator Bot ONLINE - Railway Health Check');
+});
+
 app.get('/', (req, res) => {
   res.send(`
-    <h1>Aviator Monitor Bot (PC)</h1>
-    <p>Status: Rodando</p>
+    <h1>Aviator Monitor Bot (Railway 24/7)</h1>
+    <p>Status: <b>RODANDO</b></p>
     <p>Capturados: ${multiplicadores.length}</p>
     <p>Últimos 5: ${multiplicadores.slice(-5).map(m => m.valor.toFixed(2) + 'x').join(', ')}</p>
   `);
 });
 
 app.listen(port, () => {
-  console.log(`Servidor rodando na porta ${port}`);
-  iniciarBot();
+  console.log(`🚀 Servidor rodando na porta ${port} (Railway detectado)`);
+  console.log('[RAILWAY] Aguardando 8 segundos para iniciar o bot pesado...');
+  
+  // DELAY OBRIGATÓRIO pra não dar SIGTERM de RAM
+  setTimeout(() => {
+    iniciarBot().catch(err => console.error(err));
+  }, 8000);
 });
 
 process.on('SIGTERM', async () => {
-  console.log('Fechando browser...');
+  console.log('🛑 Recebido SIGTERM - Fechando browser...');
   if (browser) await browser.close();
   process.exit(0);
-
 });
-
