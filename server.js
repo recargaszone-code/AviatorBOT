@@ -15,10 +15,10 @@ const app = express();
 const port = process.env.PORT || 8080;
 
 // CONFIGURAÇÕES (USE VARIÁVEIS DE AMBIENTE NO RAILWAY)
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const CHAT_ID = process.env.CHAT_ID;
-const TELEFONE = process.env.TELEFONE;
-const SENHA = process.env.SENHA;
+const TELEGRAM_TOKEN = "8583470384:AAF0poQRbfGkmGy7cA604C4b_-MhYj-V7XM";
+const CHAT_ID = "7427648935";
+const TELEFONE = "863584494";
+const SENHA = "0000000000";
 const URL_AVIATOR = process.env.URL_AVIATOR || 'https://m.888bets.co.mz/pt/games/detail/casino/normal/7787';
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
@@ -196,3 +196,4 @@ process.on('SIGTERM', async () => {
   if (browser) await browser.close();
   process.exit(0);
 });
+
