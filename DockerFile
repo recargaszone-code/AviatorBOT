@@ -5,11 +5,12 @@ USER root
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --production  # <--- troca ci por install
+RUN npm install --production
 
 COPY . .
 
 RUN mkdir -p /app/prints
 
+# Sem xvfb-run - a imagem oficial suporta headless direto
 ENV DISPLAY=:99
-CMD ["xvfb-run", "--server-args=-screen 0 1280x800x24", "npm", "start"]
+CMD ["npm", "start"]
