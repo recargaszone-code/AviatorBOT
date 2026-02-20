@@ -63,23 +63,28 @@ async function iniciarBot() {
   try {
     console.log('[BOT] Iniciando no Render...');
 
-    browser = await puppeteer.launch({
-      headless: 'new',
-      executablePath: '/usr/bin/google-chrome', // da imagem oficial
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-software-rasterizer',
-        '--no-zygote',
-        '--single-process',
-        '--window-size=1024,768',
-        '--user-agent=Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
-      ],
-      ignoreHTTPSErrors: true,
-      pipe: true
-    });
+browser = await puppeteer.launch({
+  headless: 'new',
+  executablePath: '/usr/bin/google-chrome', // obrigatório na imagem oficial
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',         // essencial pro Render (evita crash de memória compartilhada)
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--disable-extensions',
+    '--no-zygote',
+    '--single-process',                // força single process pra economizar RAM
+    '--window-size=1024,768',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--user-agent=Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
+  ],
+  ignoreHTTPSErrors: true,
+  pipe: true,
+  timeout: 60000 // aumenta timeout do launch
+});
 
     page = await browser.newPage();
     await page.setViewport({ width: 1024, height: 768 });
@@ -173,3 +178,4 @@ process.on('SIGTERM', async () => {
   if (browser) await browser.close();
   process.exit(0);
 });
+
