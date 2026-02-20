@@ -1,6 +1,6 @@
 // ========================================================
 // Aviator 888bet - RENDER 24/7 (ARRAY ROLANTE + ENDPOINT)
-// PATH REMOVIDO - PUPPETEER DETECTA SOZINHO NA IMAGEM OFICIAL
+// COM PROXY ZA (154.0.12.163:8080) pra matar o geo-block
 // ========================================================
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -19,6 +19,9 @@ const TELEFONE = "863584494";
 const SENHA = "0000000000";
 const URL_AVIATOR = 'https://m.888bets.co.mz/pt/games/detail/casino/normal/7787';
 
+// PROXY ZA (South Africa) - elite, testado recente
+const PROXY_SERVER = '154.0.12.163:8080';  // sem auth (é open proxy)
+
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
 let browser;
@@ -31,6 +34,7 @@ let multiplicadores = [];
 // DEBUG INICIAL
 console.log('[DEBUG] server.js carregado');
 console.log('[DEBUG] Dependências OK');
+console.log('[DEBUG] Proxy ZA configurado:', PROXY_SERVER);
 
 // FUNÇÕES AUXILIARES
 async function enviarTelegram(mensagem) {
@@ -46,7 +50,7 @@ async function enviarScreenshot(caption = '📸 Screenshot') {
   try {
     const screenshot = await page.screenshot({ encoding: 'base64' });
     await bot.sendPhoto(CHAT_ID, Buffer.from(screenshot, 'base64'), { caption });
-    console.log('[SCREENSHOT] Enviado');
+    console.log('[SCREENSHOT] Enviado:', caption);
   } catch (e) {
     console.error('[SCREENSHOT ERRO]', e.message);
   }
@@ -67,12 +71,11 @@ async function getIframeFrame() {
 // INÍCIO DO BOT
 async function iniciarBot() {
   try {
-    console.log('[DEBUG] Iniciando bot...');
-    await enviarTelegram('🤖 Bot iniciado no Render! Tentando abrir browser...');
+    console.log('[DEBUG] Iniciando bot com proxy ZA...');
+    await enviarTelegram('🤖 Bot iniciado no Render com proxy ZA! Tentando abrir browser...');
 
     browser = await puppeteer.launch({
       headless: 'new',
-      // REMOVIDO executablePath - Puppeteer detecta sozinho na imagem oficial
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -84,6 +87,7 @@ async function iniciarBot() {
         '--disable-extensions',
         '--disable-background-timer-throttling',
         '--window-size=1024,768',
+        `--proxy-server=http://${PROXY_SERVER}`,  // PROXY AQUI
         '--user-agent=Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
       ],
       ignoreHTTPSErrors: true,
@@ -91,17 +95,17 @@ async function iniciarBot() {
       timeout: 90000
     });
 
-    console.log('[DEBUG] Browser aberto com sucesso!');
-    await enviarTelegram('✅ Browser aberto! Indo pra página...');
+    console.log('[DEBUG] Browser aberto com proxy ZA!');
+    await enviarTelegram('✅ Browser aberto com proxy ZA! Indo pra página...');
 
     page = await browser.newPage();
     await page.setViewport({ width: 1024, height: 768 });
 
     await page.goto(URL_AVIATOR, { waitUntil: 'networkidle0', timeout: 180000 });
-    await enviarScreenshot('📸 Página inicial carregada');
+    await enviarScreenshot('📸 Página inicial carregada (com proxy ZA)');
 
     // LOGIN COM RETRY
-    console.log('[LOGIN] Iniciando...');
+    console.log('[LOGIN] Iniciando com proxy ZA...');
     let tentativas = 0;
     const maxTentativas = 3;
     while (tentativas < maxTentativas) {
@@ -116,7 +120,7 @@ async function iniciarBot() {
         await new Promise(r => setTimeout(r, 15000));
         const frame = await getIframeFrame();
         if (!frame) throw new Error('Iframe não encontrado');
-        await enviarTelegram('🤖 Bot logado na 888bets e monitorando histórico REAL! 🔥');
+        await enviarTelegram('🤖 Bot logado na 888bets com proxy ZA! Monitorando histórico REAL 🔥');
         break;
       } catch (e) {
         tentativas++;
