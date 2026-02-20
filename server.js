@@ -1,6 +1,6 @@
 // ========================================================
 // Aviator 888bet - RENDER 24/7 (ARRAY ROLANTE + ENDPOINT)
-// Versão corrigida 2026 - otimizada pra free tier
+// Versão 2026 - PATH DO CHROME CORRIGIDO + DEBUG PESADO
 // ========================================================
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -24,13 +24,13 @@ const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 let browser;
 let page;
 let historicoAntigo = new Set();
-let historicoAtual = []; // ARRAY ROLANTE
+let historicoAtual = [];
 const MAX_HISTORICO = 40;
 let multiplicadores = [];
 
-// DEBUG INICIAL (pra ver se chega aqui)
-console.log('[DEBUG] Arquivo server.js carregado com sucesso');
-console.log('[DEBUG] Dependências importadas');
+// DEBUG INICIAL
+console.log('[DEBUG] server.js carregado');
+console.log('[DEBUG] Dependências OK');
 
 // FUNÇÕES AUXILIARES
 async function enviarTelegram(mensagem) {
@@ -46,7 +46,7 @@ async function enviarScreenshot(caption = '📸 Screenshot') {
   try {
     const screenshot = await page.screenshot({ encoding: 'base64' });
     await bot.sendPhoto(CHAT_ID, Buffer.from(screenshot, 'base64'), { caption });
-    console.log('[SCREENSHOT] Enviado:', caption);
+    console.log('[SCREENSHOT] Enviado');
   } catch (e) {
     console.error('[SCREENSHOT ERRO]', e.message);
   }
@@ -56,7 +56,7 @@ async function getIframeFrame() {
   try {
     const iframeElement = await page.waitForSelector('iframe', { timeout: 60000 });
     const frame = await iframeElement.contentFrame();
-    console.log('[IFRAME] Re-pego com sucesso');
+    console.log('[IFRAME] OK');
     return frame;
   } catch (err) {
     console.error('[IFRAME ERRO]', err.message);
@@ -67,12 +67,12 @@ async function getIframeFrame() {
 // INÍCIO DO BOT
 async function iniciarBot() {
   try {
-    console.log('[DEBUG] Entrando em iniciarBot');
+    console.log('[DEBUG] Iniciando bot...');
     await enviarTelegram('🤖 Bot iniciado no Render! Tentando abrir browser...');
 
     browser = await puppeteer.launch({
       headless: 'new',
-      executablePath: '/usr/bin/google-chrome-stable',
+      executablePath: '/usr/bin/chromium-browser',  // CAMINHO CORRETO NA IMAGEM PUPPETEER
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -91,7 +91,7 @@ async function iniciarBot() {
       timeout: 90000
     });
 
-    console.log('[DEBUG] Browser lançado com sucesso');
+    console.log('[DEBUG] Browser aberto com sucesso!');
     await enviarTelegram('✅ Browser aberto! Indo pra página...');
 
     page = await browser.newPage();
@@ -127,7 +127,7 @@ async function iniciarBot() {
       }
     }
 
-    // LOOP PRINCIPAL - ARRAY ROLANTE
+    // LOOP PRINCIPAL
     setInterval(async () => {
       try {
         const frame = await getIframeFrame();
@@ -156,7 +156,7 @@ async function iniciarBot() {
         if (atualizou) {
           fs.writeFileSync('historico.json', JSON.stringify(multiplicadores, null, 2));
           console.log(`[ARRAY] Atualizado → ${historicoAtual.length} itens`);
-          await enviarTelegram(`🔄 Histórico atualizado: ${historicoAtual.slice(0,5).join('x → ')}x ...`);
+          await enviarTelegram(`🔄 Histórico atualizado: ${historicoAtual.slice(0,5).join(' → ')}x ...`);
         }
       } catch (err) {
         console.error('[ERRO no loop]', err.message);
