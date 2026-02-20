@@ -1,5 +1,6 @@
 // ========================================================
 // Aviator 888bet - RENDER 24/7 (ARRAY ROLANTE + ENDPOINT)
+// Versão corrigida 2026 - otimizada pra free tier
 // ========================================================
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -27,11 +28,15 @@ let historicoAtual = []; // ARRAY ROLANTE
 const MAX_HISTORICO = 40;
 let multiplicadores = [];
 
+// DEBUG INICIAL (pra ver se chega aqui)
+console.log('[DEBUG] Arquivo server.js carregado com sucesso');
+console.log('[DEBUG] Dependências importadas');
+
 // FUNÇÕES AUXILIARES
 async function enviarTelegram(mensagem) {
   try {
     await bot.sendMessage(CHAT_ID, mensagem, { parse_mode: 'HTML' });
-    console.log('[TELEGRAM] Enviado');
+    console.log('[TELEGRAM] Enviado:', mensagem);
   } catch (err) {
     console.error('[TELEGRAM ERRO]', err.message);
   }
@@ -41,6 +46,7 @@ async function enviarScreenshot(caption = '📸 Screenshot') {
   try {
     const screenshot = await page.screenshot({ encoding: 'base64' });
     await bot.sendPhoto(CHAT_ID, Buffer.from(screenshot, 'base64'), { caption });
+    console.log('[SCREENSHOT] Enviado:', caption);
   } catch (e) {
     console.error('[SCREENSHOT ERRO]', e.message);
   }
@@ -48,9 +54,9 @@ async function enviarScreenshot(caption = '📸 Screenshot') {
 
 async function getIframeFrame() {
   try {
-    const iframeElement = await page.waitForSelector('iframe', { timeout: 30000 });
+    const iframeElement = await page.waitForSelector('iframe', { timeout: 60000 });
     const frame = await iframeElement.contentFrame();
-    console.log('[IFRAME] Re-pego!');
+    console.log('[IFRAME] Re-pego com sucesso');
     return frame;
   } catch (err) {
     console.error('[IFRAME ERRO]', err.message);
@@ -61,30 +67,32 @@ async function getIframeFrame() {
 // INÍCIO DO BOT
 async function iniciarBot() {
   try {
-    console.log('[BOT] Iniciando no Render...');
+    console.log('[DEBUG] Entrando em iniciarBot');
+    await enviarTelegram('🤖 Bot iniciado no Render! Tentando abrir browser...');
 
-browser = await puppeteer.launch({
-  headless: 'new',
-  executablePath: '/usr/bin/google-chrome', // obrigatório na imagem oficial
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',         // essencial pro Render (evita crash de memória compartilhada)
-    '--disable-gpu',
-    '--disable-software-rasterizer',
-    '--disable-extensions',
-    '--no-zygote',
-    '--single-process',                // força single process pra economizar RAM
-    '--window-size=1024,768',
-    '--disable-background-timer-throttling',
-    '--disable-backgrounding-occluded-windows',
-    '--disable-renderer-backgrounding',
-    '--user-agent=Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
-  ],
-  ignoreHTTPSErrors: true,
-  pipe: true,
-  timeout: 60000 // aumenta timeout do launch
-});
+    browser = await puppeteer.launch({
+      headless: 'new',
+      executablePath: '/usr/bin/google-chrome-stable',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--disable-software-rasterizer',
+        '--single-process',
+        '--no-zygote',
+        '--disable-extensions',
+        '--disable-background-timer-throttling',
+        '--window-size=1024,768',
+        '--user-agent=Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36'
+      ],
+      ignoreHTTPSErrors: true,
+      pipe: true,
+      timeout: 90000
+    });
+
+    console.log('[DEBUG] Browser lançado com sucesso');
+    await enviarTelegram('✅ Browser aberto! Indo pra página...');
 
     page = await browser.newPage();
     await page.setViewport({ width: 1024, height: 768 });
@@ -95,7 +103,7 @@ browser = await puppeteer.launch({
     // LOGIN COM RETRY
     console.log('[LOGIN] Iniciando...');
     let tentativas = 0;
-    const maxTentativas = 2;
+    const maxTentativas = 3;
     while (tentativas < maxTentativas) {
       try {
         await page.waitForSelector('input#phone', { timeout: 180000, visible: true });
@@ -108,13 +116,14 @@ browser = await puppeteer.launch({
         await new Promise(r => setTimeout(r, 15000));
         const frame = await getIframeFrame();
         if (!frame) throw new Error('Iframe não encontrado');
-        enviarTelegram('🤖 Bot logado na 888bets e monitorando histórico REAL! 🔥');
+        await enviarTelegram('🤖 Bot logado na 888bets e monitorando histórico REAL! 🔥');
         break;
       } catch (e) {
         tentativas++;
-        await enviarScreenshot(`❌ Falha login (tentativa ${tentativas})`);
+        await enviarScreenshot(`❌ Falha login (tentativa ${tentativas}/${maxTentativas})`);
+        console.error('[LOGIN FALHA]', e.message);
         if (tentativas >= maxTentativas) throw e;
-        await new Promise(r => setTimeout(r, 10000));
+        await new Promise(r => setTimeout(r, 15000));
       }
     }
 
@@ -147,6 +156,7 @@ browser = await puppeteer.launch({
         if (atualizou) {
           fs.writeFileSync('historico.json', JSON.stringify(multiplicadores, null, 2));
           console.log(`[ARRAY] Atualizado → ${historicoAtual.length} itens`);
+          await enviarTelegram(`🔄 Histórico atualizado: ${historicoAtual.slice(0,5).join('x → ')}x ...`);
         }
       } catch (err) {
         console.error('[ERRO no loop]', err.message);
@@ -154,8 +164,8 @@ browser = await puppeteer.launch({
     }, 8000);
 
   } catch (err) {
-    console.error('[ERRO FATAL]', err.message);
-    await enviarScreenshot('💥 ERRO FATAL');
+    console.error('[FATAL CRASH]', err.message, err.stack);
+    await enviarTelegram(`💥 CRASH FATAL NO RENDER: ${err.message}\nStack: ${err.stack?.slice(0,500)}`);
     if (browser) await browser.close();
     process.exit(1);
   }
@@ -178,4 +188,3 @@ process.on('SIGTERM', async () => {
   if (browser) await browser.close();
   process.exit(0);
 });
-
