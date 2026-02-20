@@ -1,6 +1,6 @@
 // ========================================================
 // Aviator 888bet - RENDER 24/7 (ARRAY ROLANTE + ENDPOINT)
-// PATH DO CHROME CORRIGIDO: /usr/bin/chromium-browser
+// PATH REMOVIDO - PUPPETEER DETECTA SOZINHO NA IMAGEM OFICIAL
 // ========================================================
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -72,7 +72,7 @@ async function iniciarBot() {
 
     browser = await puppeteer.launch({
       headless: 'new',
-      executablePath: '/usr/bin/chromium-browser',  // CAMINHO CERTO NA IMAGEM PUPPETEER
+      // REMOVIDO executablePath - Puppeteer detecta sozinho na imagem oficial
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
