@@ -1,15 +1,15 @@
-FROM ghcr.io/puppeteer/puppeteer:latest
+FROM ghcr.io/puppeteer/puppeteer:23.4.1
 
-# Railway precisa de root pra não dar permissão
 USER root
 
 WORKDIR /app
 
-# Instala só as dependências de produção
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --production  # <--- troca ci por install
 
 COPY . .
 
-# Usa o start do seu package.json (que roda node server.js)
-CMD ["npm", "start"]
+RUN mkdir -p /app/prints
+
+ENV DISPLAY=:99
+CMD ["xvfb-run", "--server-args=-screen 0 1280x800x24", "npm", "start"]
