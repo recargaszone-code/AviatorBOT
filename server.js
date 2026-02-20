@@ -1,6 +1,7 @@
 // ========================================================
 // Aviator 888bet - RENDER 24/7 (ARRAY ROLANTE + ENDPOINT)
-// FIX TIMEOUT + RETRY NO GOTO + DEBUG PESADO
+// FIX TIMEOUT + RETRY 5X NO GOTO + DEBUG MÁXIMO
+// SEM PROXY RUIM - foco em carregar a página
 // ========================================================
 const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
@@ -87,7 +88,7 @@ async function iniciarBot() {
       ],
       ignoreHTTPSErrors: true,
       pipe: true,
-      timeout: 90000
+      timeout: 120000  // 2 minutos pro launch
     });
 
     console.log('[DEBUG] Browser aberto!');
@@ -95,26 +96,27 @@ async function iniciarBot() {
 
     page = await browser.newPage();
     await page.setViewport({ width: 1024, height: 768 });
-    await page.setDefaultNavigationTimeout(300000); // 5 minutos global
+    await page.setDefaultNavigationTimeout(300000); // 5 minutos pra qualquer navegação
 
-    // RETRY NO GOTO (3 tentativas)
+    // RETRY PESADO NO GOTO (5 tentativas)
     let gotoSucesso = false;
-    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    for (let tentativa = 1; tentativa <= 5; tentativa++) {
       try {
-        console.log(`[GOTO] Tentativa ${tentativa}/3`);
+        console.log(`[GOTO] Tentativa ${tentativa}/5`);
+        await enviarTelegram(`Tentando carregar página (tentativa ${tentativa}/5)...`);
         await page.goto(URL_AVIATOR, { waitUntil: 'networkidle0', timeout: 300000 });
         await enviarScreenshot(`📸 Página carregada (tentativa ${tentativa})`);
         gotoSucesso = true;
         break;
       } catch (e) {
         console.error(`[GOTO ERRO] Tentativa ${tentativa}:`, e.message);
-        await enviarTelegram(`⚠️ Falha no goto (tentativa ${tentativa}/3): ${e.message}`);
-        await esperar(10);
+        await enviarTelegram(`⚠️ Falha no goto (tentativa ${tentativa}/5): ${e.message}`);
+        await new Promise(r => setTimeout(r, 20000)); // 20s entre tentativas
       }
     }
 
     if (!gotoSucesso) {
-      throw new Error('Falha em todas as tentativas de carregar a página');
+      throw new Error('Falha em todas as 5 tentativas de carregar a página');
     }
 
     // LOGIN COM RETRY
